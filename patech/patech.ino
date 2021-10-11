@@ -46,7 +46,9 @@ NTPClient timeClient(ntpUDP, "pool.ntp.org");
 String weekDays[7]={"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
 String months[12]={"January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"};
 unsigned long ms = 0;
-RTC_DATA_ATTR int last_rain = 0; //4095
+RTC_DATA_ATTR byte last_rain = 0; 
+RTC_DATA_ATTR float averageItem = 0;
+RTC_DATA_ATTR float temp = 0;
 RTC_DATA_ATTR byte duration = 0;
 byte tries = 0;
 bool send_status;
@@ -79,9 +81,12 @@ bool sendToFirebase(String currentTime, String date_today, String hour){
     float temp_f = dht22.readTemperature(true);
     int rdSensor = analogRead(RDSPIN);
     float rain_duration = processRainDuration(rdSensor);
-    int hour_now = hour.toInt();
+    String last_update = hour.substring(0,5);
+    String hours = hour.substring(0,2);
+    int hour_now = hours.toInt();
+    int leaf_wetness = processLeafWetness(temp,duration);
 
-    if(currentTime == "Thursday, 1 January 1970, 07:00:04" || currentTime == "Thursday, 1 January 1970, 07:00:05"){
+    if(currentTime == "Thursday, 1 January 1970, 07:00:04" || currentTime == "Thursday, 1 January 1970, 07:00:05"  || currentTime == "Thursday, 1 January 1970, 07:00:06" ){
         return false;
     }
 
@@ -94,23 +99,26 @@ bool sendToFirebase(String currentTime, String date_today, String hour){
             FirebaseJson json;
             FirebaseJsonData result;
         
-            sslClient.setInsecure(); //skip cert verification
+            sslClient.setInsecure();
             secured_client.setCACert(TELEGRAM_CERTIFICATE_ROOT);
             
-            json.set(currentTime + "/humidity", hum);
-            json.set(currentTime + "/rain_dur", rain_duration);
-            json.set(currentTime +"/temp", temp);
-            json.set(currentTime +"/temp_f", temp_f);
-            json.set(currentTime +"/date", date_today);
-            json.set(currentTime + "/hour", hour_now);
-
+            json.set("/current_time", currentTime);
+            json.set("/humidity", hum);
+            json.set("/rain_dur", rain_duration);
+            json.set("/temp", temp);
+            json.set("/temp_f", temp_f);
+            json.set("/date", date_today);
+            json.set("/hour", hour_now);
+            json.set("/last_update", last_update);
+            json.set("/average_temp", leaf_wetness);
+            
             Serial.print(F("Connecting to server..."));
             tries = 0;
             while(tries != 3){
                 if (sslClient.connect("patech-xl-imdp-default-rtdb.asia-southeast1.firebasedatabase.app", 443)){
                     Serial.println(F(" ok"));
                     Serial.println(F("Send POST request..."));
-                    sslClient.print("PATCH /data.json HTTP/1.1\n");
+                    sslClient.print("POST /data/station_utara.json HTTP/1.1\n");
                     sslClient.print("Host: patech-xl-imdp-default-rtdb.asia-southeast1.firebasedatabase.app\n");
                     sslClient.print("Content-Type: application/json\n");
                     sslClient.print("Content-Length: ");
@@ -136,6 +144,8 @@ bool sendToFirebase(String currentTime, String date_today, String hour){
                         Serial.print(tries);
                         Serial.println(" of 3");
                         bot_send_error_status();
+                        sslClient.stop();
+                        // espRestart();
                     }
                 }
                 else{
@@ -146,6 +156,8 @@ bool sendToFirebase(String currentTime, String date_today, String hour){
                     Serial.print(tries);
                     Serial.println(" of 3");
                     bot_send_error_status();
+                    sslClient.stop();
+                    // espRestart();
                 }
             }
             sslClient.stop();
@@ -169,6 +181,22 @@ byte processRainDuration(int analog_value){
         duration++;
     }
     return duration;
+}
+
+float processLeafWetness(float temp_c, byte duration){
+    if(duration != 0 && last_rain != duration){
+      temp += temp_c;
+      last_rain = duration;
+      ++averageItem;
+    }
+    else{
+      if(last_rain != 0){
+        last_rain = 0;
+        return temp / averageItem;  
+      }else{
+        return 0;
+      }
+    }
 }
 
 void setupWiFi(){
@@ -225,8 +253,7 @@ String hourToday(){
   //Get a time structure
   struct tm *ptm = gmtime ((time_t *)&epochTime); 
   int currentYear = ptm->tm_year+1900;
-  String hour = formattedTime.substring(0,2);
-  return hour;
+  return formattedTime;
 }
 
 void setupCurrentTime(){
