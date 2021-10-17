@@ -61,10 +61,6 @@ void setup()
     setupWiFi();
     retrieveTime();
     setupCurrentTime();
-    send_status = sendToFirebase(showCurrentTime(), dateToday(), hourToday());
-    while(send_status != true){
-        send_status = sendToFirebase(showCurrentTime(), dateToday(), hourToday());
-    }
     WiFi.disconnect();
     startDeepSleep();
 }
@@ -75,78 +71,66 @@ void RDSSetup(){
     pinMode(RDSPIN, INPUT);
 }
 
-bool sendToFirebase(String currentTime, String date_today, String hour){
+void sendToFirebase(String currentTime, String date_today, String hour){
     float hum = dht22.readHumidity();
     float temp = dht22.readTemperature();
     float temp_f = dht22.readTemperature(true);
     int rdSensor = analogRead(RDSPIN);
     float rain_duration = processRainDuration(rdSensor);
-    String last_update = hour.substring(0,5);
-    String hours = hour.substring(0,2);
-    int hour_now = hours.toInt();
     int leaf_wetness = processLeafWetness(temp,duration);
-
-    if(currentTime == "Thursday, 1 January 1970, 07:00:04" || currentTime == "Thursday, 1 January 1970, 07:00:05"  || currentTime == "Thursday, 1 January 1970, 07:00:06" ){
-        return false;
+    String last_update = hour.substring(0,5);
+    int hour_now = last_update.substring(0,2).toInt();
+    if(hour_now == 7){
+       currentTime = showCurrentTime(); 
+       date_today = dateToday();
+       hour = hourToday();
+       String last_update = hour.substring(0,5);
+       int hour_now = last_update.substring(0,2).toInt();
     }
 
-    else
+    if (millis() - ms > 15000 || ms == 0)
     {
-        if (millis() - ms > 15000 || ms == 0)
-        {
-            ms = millis();
+        ms = millis();
 
-            FirebaseJson json;
-            FirebaseJsonData result;
+        FirebaseJson json;
+        FirebaseJsonData result;
+    
+        sslClient.setInsecure();
+        secured_client.setCACert(TELEGRAM_CERTIFICATE_ROOT);
         
-            sslClient.setInsecure();
-            secured_client.setCACert(TELEGRAM_CERTIFICATE_ROOT);
-            
-            json.set("/current_time", currentTime);
-            json.set("/humidity", hum);
-            json.set("/rain_dur", rain_duration);
-            json.set("/temp", temp);
-            json.set("/temp_f", temp_f);
-            json.set("/date", date_today);
-            json.set("/hour", hour_now);
-            json.set("/last_update", last_update);
-            json.set("/average_temp", leaf_wetness);
-            
-            Serial.print(F("Connecting to server..."));
-            tries = 0;
-            while(tries != 3){
-                if (sslClient.connect("patech-xl-imdp-default-rtdb.asia-southeast1.firebasedatabase.app", 443)){
-                    Serial.println(F(" ok"));
-                    Serial.println(F("Send POST request..."));
-                    sslClient.print("POST /data/station_utara.json HTTP/1.1\n");
-                    sslClient.print("Host: patech-xl-imdp-default-rtdb.asia-southeast1.firebasedatabase.app\n");
-                    sslClient.print("Content-Type: application/json\n");
-                    sslClient.print("Content-Length: ");
-                    sslClient.print(json.serializedBufferLength());
-                    sslClient.print("\n\n");
-                    json.toString(sslClient);
+        json.set("/current_time", currentTime);
+        json.set("/humidity", hum);
+        json.set("/rain_dur", rain_duration);
+        json.set("/temp_c", temp);
+        json.set("/temp_f", temp_f);
+        json.set("/date", date_today);
+        json.set("/hour", hour_now);
+        json.set("/last_update", last_update);
+        json.set("/average_temp", leaf_wetness);
+        
+        Serial.print(F("Connecting to server..."));
+        tries = 0;
+        while(tries != 3){
+            if (sslClient.connect("patech-xl-imdp-default-rtdb.asia-southeast1.firebasedatabase.app", 443)){
+                Serial.println(F(" ok"));
+                Serial.println(F("Send POST request..."));
+                sslClient.print("POST /data/station_utara.json HTTP/1.1\n");
+                sslClient.print("Host: patech-xl-imdp-default-rtdb.asia-southeast1.firebasedatabase.app\n");
+                sslClient.print("Content-Type: application/json\n");
+                sslClient.print("Content-Length: ");
+                sslClient.print(json.serializedBufferLength());
+                sslClient.print("\n\n");
+                json.toString(sslClient);
 
-                    Serial.print("Read response...");
+                Serial.print("Read response...");
 
-                    //Automatically parsing for response (w or w/o header) with chunk encoding supported.
-                    if (json.readFrom(sslClient))
-                    {
-                        Serial.println();
-                        json.toString(Serial, true);
-                        Serial.println("\n\nComplete");
-                        tries = 3;
-                    }
-                    else{
-                        serverIndicatorLED();
-                        ++tries;
-                        Serial.print("failed connect to server, retrying...,");
-                        Serial.print(" attempt ");
-                        Serial.print(tries);
-                        Serial.println(" of 3");
-                        bot_send_error_status();
-                        sslClient.stop();
-                        // espRestart();
-                    }
+                //Automatically parsing for response (w or w/o header) with chunk encoding supported.
+                if (json.readFrom(sslClient))
+                {
+                    Serial.println();
+                    json.toString(Serial, true);
+                    Serial.println("\n\nComplete");
+                    tries = 3;
                 }
                 else{
                     serverIndicatorLED();
@@ -160,9 +144,19 @@ bool sendToFirebase(String currentTime, String date_today, String hour){
                     // espRestart();
                 }
             }
-            sslClient.stop();
+            else{
+                serverIndicatorLED();
+                ++tries;
+                Serial.print("failed connect to server, retrying...,");
+                Serial.print(" attempt ");
+                Serial.print(tries);
+                Serial.println(" of 3");
+                bot_send_error_status();
+                sslClient.stop();
+                // espRestart();
+            }
+        sslClient.stop();
         }     
-        return true;
     }
 }
 
@@ -184,7 +178,7 @@ byte processRainDuration(int analog_value){
 }
 
 float processLeafWetness(float temp_c, byte duration){
-    if(duration != 0 && last_rain != duration){
+    if(duration != 0){
       temp += temp_c;
       last_rain = duration;
       ++averageItem;
@@ -201,7 +195,7 @@ float processLeafWetness(float temp_c, byte duration){
 
 void setupWiFi(){
     int i = 0; 
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    WiFi.begin(WIFI_SSID_1, WIFI_PASSWORD_1);
     Serial.print("Connecting to Wi-Fi");
     while (WiFi.status() != WL_CONNECTED)
     {
