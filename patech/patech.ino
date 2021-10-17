@@ -24,10 +24,10 @@
 #define WIFI_SSID_1 "Patech_WiFi"
 #define WIFI_PASSWORD_1 "patech2345"
 #define FIREBASE_SERVER_MAIN "patech-xl-imdp-default-rtdb.asia-southeast1.firebasedatabase.app"
-#define DATABASE_SERCRET "uo1rrJz0wU5WBTIXkNr0pRtByYTa6HSaCBI3Sxjd"
-#define API_KEY "AIzaSyCBwCmJHNPPkY6yrlwEkQtin7DNFP4SZ_g"
+#define DATABASE_SERCRET "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+#define API_KEY "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 #define USER_EMAIL "abdan.idza2345@gmail.com"
-#define USER_PASSWORD "kindaprivate2345"
+#define USER_PASSWORD "xxxxxxxxxxxxxxxxxxxx"
 #define BAUDRATE 115200
 #define DHTPIN 27
 #define RDSPIN 34
@@ -35,11 +35,10 @@
 
 #define uS_TO_S_FACTOR 1000000UL /* Conversion factor for micro seconds to seconds */ 
 #define TIME_TO_SLEEP 3700/* Time ESP32 will go to sleep (in seconds) */ 
-#define BOT_TOKEN "2046050928:AAHrqoFojaT5Unk4Mmzk7Yp4cD7ySH_Esjs"
+#define BOT_TOKEN "xxxxxxxxxx:xxxxxxxxxxxxxxxxxxxxxxxx"
 
 WiFiClientSecure secured_client, sslClient;
 UniversalTelegramBot bot(BOT_TOKEN, secured_client);
-// secured_client.setCACert(TELEGRAM_CERTIFICATE_ROOT);
 WiFiUDP ntpUDP;
 DHT dht22(DHTPIN, DHTTYPE);
 NTPClient timeClient(ntpUDP, "pool.ntp.org");
